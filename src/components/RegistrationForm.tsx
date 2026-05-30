@@ -2,6 +2,7 @@ import {
   useState,
   useEffect,
   useMemo,
+  useRef,
   useImperativeHandle,
   forwardRef,
   SubmitEventHandler,
@@ -9,9 +10,10 @@ import {
   FormEvent,
 } from "react";
 import { Loader2, UserPlus, X, Search } from "lucide-react";
-import { departmentService, IDepartment } from "@/lib/attendanceService";
 import { NIGERIA_STATES } from "@/data/nigeria-states";
 import { NATIONALITIES } from "@/data/nationalities";
+import { departmentService } from "@/lib/departmentService";
+import { IDepartment } from "@/types/user";
 
 // Parents reset internal state (chips, search, touched, errors) via the ref's
 // reset() method. Tab selection is intentionally preserved across resets so the
@@ -92,6 +94,7 @@ const RegistrationForm = forwardRef<RegistrationFormHandle, RegistrationFormProp
   // state (no DOM reads, no setState-in-effect). Populated via the form's
   // onInput handler which bubbles from every named input/select.
   const [formValues, setFormValues] = useState<Record<string, string>>({});
+  const formElRef = useRef<HTMLFormElement>(null);
 
   const isFormValid = useMemo(() => {
     const get = (k: string) => (formValues[k] ?? "").trim();
@@ -135,6 +138,7 @@ const RegistrationForm = forwardRef<RegistrationFormHandle, RegistrationFormProp
       setTouched({});
       setClientErrors({});
       setFormValues({});
+      formElRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     },
   }), []);
 
@@ -214,7 +218,7 @@ const RegistrationForm = forwardRef<RegistrationFormHandle, RegistrationFormProp
         </button>
       </div>
 
-      <form onSubmit={onSubmit} onInput={handleFormInput} className="space-y-3" noValidate>
+      <form ref={formElRef} onSubmit={onSubmit} onInput={handleFormInput} className="space-y-3" noValidate>
         {/* Hidden fields */}
         <input
           type="hidden"

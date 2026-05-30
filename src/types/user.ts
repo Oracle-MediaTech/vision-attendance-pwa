@@ -6,6 +6,11 @@ export type MembershipType = "NON_WORKER" | "WORKER";
 export type WorkerType = "REGULAR" | "EXECUTIVE";
 export type UserRole = "MEMBER" | "WORKER" | "ADMIN";
 
+export interface IDepartment {
+    id: string;
+    name: string;
+    description?: string;
+}
 export interface IUser {
     _id?: string;
     id?: string;
@@ -24,6 +29,7 @@ export interface IUser {
     workerType?: WorkerType;
     role?: UserRole;
     attendances?: IAttendance[];
+    departments?: IDepartment[];
     createdAt?: Date;
     updatedAt?: Date;
 }

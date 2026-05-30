@@ -33,6 +33,7 @@ export interface UpdateAttendanceSessionPayload {
 export interface MarkAttendancePayload {
     userId: string;
     sessionId: string;
+    markedAt?: Date;
 }
 
 export interface BulkMarkAttendancePayload {

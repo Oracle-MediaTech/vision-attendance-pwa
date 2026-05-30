@@ -1,6 +1,18 @@
 import axios, { AxiosError, AxiosInstance, AxiosResponse } from "axios";
 
-const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3030/api/v1";
+// Backend always runs on port 3030 on the same host the user is browsing
+// from — we reuse the page's hostname so the API URL tracks the laptop's
+// current LAN IP without rebuilds. Works for localhost, LAN IP, or any host.
+const BACKEND_PORT = 3030;
+
+function resolveApiUrl(): string {
+    if (typeof window !== "undefined") {
+        return `${window.location.protocol}//${window.location.hostname}:${BACKEND_PORT}/api/v1`;
+    }
+    return "";
+}
+
+const API_URL = resolveApiUrl();
 
 const apiClient: AxiosInstance = axios.create({
     baseURL: API_URL,

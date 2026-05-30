@@ -18,11 +18,13 @@ export const attendanceService = {
             "Session started successfully!"
         ),
 
-    markAttendance: (payload: MarkAttendancePayload) =>
+    markAttendance: (payload: MarkAttendancePayload) => {
+        console.log("Marking attendance with payload:", payload);
         handleApiCall<{ success: boolean }>(
             () => apiClient.post<ApiResponse<{ success: boolean }>>("/attendance/mark", payload),
             "Attendance recorded!"
-        ),
+        )
+    },
 
     bulkMarkAttendance: (payload: BulkMarkAttendancePayload) =>
         handleApiCall<BulkMarkAttendanceResult>(
@@ -50,31 +52,6 @@ export const attendanceService = {
         handleApiCall<{ success: boolean }>(
             () => apiClient.delete<ApiResponse<{ success: boolean }>>(`/attendance/session/${id}`),
             "Session deleted!"
-        ),
-};
-
-export const userService = {
-    getUsers: (params?: { page?: number; limit?: number; search?: string }) =>
-        handleApiCall<PaginatedData<IUser>>(
-            () => apiClient.get<ApiResponse<PaginatedData<IUser>>>("/users", { params })
-        ),
-
-    searchUsers: (name: string) =>
-        handleApiCall<IUser[]>(
-            () => apiClient.get<ApiResponse<IUser[]>>("/user/search", { params: { name } })
-        ),
-};
-
-export interface IDepartment {
-    id: string;
-    name: string;
-    description?: string;
-}
-
-export const departmentService = {
-    getAll: () =>
-        handleApiCall<PaginatedData<IDepartment>>(
-            () => apiClient.get<ApiResponse<PaginatedData<IDepartment>>>("/departments", { params: { limit: 100 } })
         ),
 };
 

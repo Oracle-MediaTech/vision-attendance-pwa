@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { userService, authService } from '@/lib/attendanceService'
+import { authService } from '@/lib/attendanceService'
 import { ApiError } from '@/lib/utils'
 import { IUser } from '@/types/user'
 import SearchInput from '@/components/SearchInput'
 import RegistrationForm, { RegistrationFormHandle } from '@/components/RegistrationForm'
 import { UserPlus, Users, Loader2, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { toast } from 'sonner'
+import { userService } from '@/lib/userService'
 
 export default function Members() {
   const [search, setSearch] = useState('')

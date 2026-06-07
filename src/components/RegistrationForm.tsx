@@ -46,8 +46,6 @@ type MemberTab = "non-worker" | "worker";
 const REQUIRED_FIELDS = new Set([
   "firstName",
   "lastName",
-  "email",
-  "phoneNumber",
   "address",
   "gender",
 ]);
@@ -98,7 +96,7 @@ const RegistrationForm = forwardRef<RegistrationFormHandle, RegistrationFormProp
 
   const isFormValid = useMemo(() => {
     const get = (k: string) => (formValues[k] ?? "").trim();
-    const required = ["firstName", "lastName", "email", "phoneNumber", "address", "gender"];
+    const required = ["firstName", "lastName", "address", "gender"];
     for (const f of required) {
       if (!get(f)) return false;
     }
@@ -268,7 +266,6 @@ const RegistrationForm = forwardRef<RegistrationFormHandle, RegistrationFormProp
               type="email"
               name="email"
               placeholder="Email *"
-              required
               onBlur={handleBlur}
               className={inputCls(!!errFor("email"))}
             />
@@ -279,7 +276,6 @@ const RegistrationForm = forwardRef<RegistrationFormHandle, RegistrationFormProp
               type="text"
               name="phoneNumber"
               placeholder="Phone Number *"
-              required
               onBlur={handleBlur}
               className={inputCls(!!errFor("phoneNumber"))}
             />

@@ -1,15 +1,28 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { attendanceService, authService } from "@/lib/attendanceService";
 import { ApiError } from "@/lib/utils";
-import { IAttendanceSession } from "@/types/attendance";
+import {
+  AttendanceFilterParams,
+  IAttendanceSession,
+} from "@/types/attendance";
 import { IUser } from "@/types/user";
 import SearchInput from "@/components/SearchInput";
 import RegistrationForm, {
   RegistrationFormHandle,
 } from "@/components/RegistrationForm";
+import AttendanceFilterBar from "@/components/AttendanceFilterBar";
 import { format, set } from "date-fns";
-import { UserPlus, Users, Calendar, Clock, Loader2, X } from "lucide-react";
+import {
+  UserPlus,
+  Users,
+  Calendar,
+  Clock,
+  Loader2,
+  Download,
+  X,
+} from "lucide-react";
 import AttendeeList from "@/components/AttendanceList";
 import { userService } from "@/lib/userService";
 
@@ -26,23 +39,52 @@ export default function SessionDetail() {
   const [registering, setRegistering] = useState(false);
   const [markedAt, setMarkedAt] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [filters, setFilters] = useState<AttendanceFilterParams>({});
+  const [exporting, setExporting] = useState(false);
+  // Service override for the next mark; empty string = auto (backend infers).
+  const [serviceOverride, setServiceOverride] = useState<string>("");
   const formRef = useRef<RegistrationFormHandle>(null);
+
+  const isFiltered = useMemo(
+    () =>
+      Boolean(
+        (filters.departmentIds && filters.departmentIds.length > 0) ||
+          filters.gender ||
+          filters.membershipType ||
+          filters.churchStatus ||
+          filters.lateComers ||
+          filters.serviceOrder,
+      ),
+    [filters],
+  );
 
   const fetchSession = useCallback(async () => {
     if (!sessionId) return;
     try {
-      const result = await attendanceService.getSessionById(sessionId);
+      const result = await attendanceService.getSessionById(sessionId, filters);
       setSession(result);
     } catch {
       // handled by toast
     } finally {
       setLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, filters]);
 
   useEffect(() => {
     fetchSession();
   }, [fetchSession]);
+
+  const handleExportPdf = useCallback(async () => {
+    if (!sessionId || !session) return;
+    setExporting(true);
+    try {
+      await attendanceService.exportSessionPdf(sessionId, session.serviceName, filters);
+    } catch {
+      toast.error("Failed to export attendance PDF");
+    } finally {
+      setExporting(false);
+    }
+  }, [sessionId, session, filters]);
 
   const searchMembers = useCallback(async (query: string) => {
     if (query.trim() !== "") {
@@ -82,13 +124,16 @@ export default function SessionDetail() {
   const handleSingleMark = async (userId: string) => {
     if (!sessionId) return;
     try {
-      console.log("Marking attendance for user:", userId, "at time:", markedAt);
+      const serviceOrder =
+        serviceOverride === "" ? undefined : Number(serviceOverride);
       await attendanceService.markAttendance({
         userId,
         sessionId,
         markedAt: markedAt ? buildDateFromTime(markedAt) : undefined,
+        serviceOrder,
       });
       setMemberSearch("");
+      setMarkedAt("");
       setSearchResult([]);
       setShowRegistrationForm(false);
       await fetchSession();
@@ -150,6 +195,23 @@ export default function SessionDetail() {
   const date = session.startedAt ? new Date(session.startedAt) : null;
   const attendees = session.attendees || [];
   const markedUserIds = new Set(attendees.map((a) => a.userId));
+  const services = session.services ?? [];
+  const isMultiService = services.length > 1;
+
+  // Recomputed every render so the indicator naturally flips as the clock
+  // passes a service boundary while the page is open.
+  const inferredOrder = (() => {
+    if (services.length === 0) return 1;
+    const reference = markedAt ? buildDateFromTime(markedAt) : new Date();
+    const sorted = [...services].sort((a, b) => a.order - b.order);
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const current = sorted[i];
+      const next = sorted[i + 1];
+      const boundary = new Date(current.closesAt ?? next.serviceTime);
+      if (reference.getTime() < boundary.getTime()) return current.order;
+    }
+    return sorted[sorted.length - 1].order;
+  })();
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -178,14 +240,61 @@ export default function SessionDetail() {
             </span>
           </div>
         </div>
-        <button
-          onClick={() => setShowAddPanel(!showAddPanel)}
-          className="flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors w-full sm:w-auto"
-        >
-          <UserPlus className="w-4 h-4" />
-          Mark Attendance
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+          <button
+            onClick={handleExportPdf}
+            disabled={exporting || attendees.length === 0}
+            className="flex items-center justify-center gap-2 px-4 py-3 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors w-full sm:w-auto"
+          >
+            {exporting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            Export PDF
+          </button>
+          <button
+            onClick={() => setShowAddPanel(!showAddPanel)}
+            className="flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors w-full sm:w-auto"
+          >
+            <UserPlus className="w-4 h-4" />
+            Mark Attendance
+          </button>
+        </div>
       </div>
+
+      <AttendanceFilterBar
+        filters={filters}
+        onChange={setFilters}
+        services={services}
+      />
+
+      {isMultiService && (
+        <div className="bg-white border border-gray-200 rounded-xl px-4 py-2 mb-3 flex items-center gap-2 text-xs">
+          <span className="text-gray-600">Mark next attendee into:</span>
+          <select
+            value={serviceOverride}
+            onChange={(e) => setServiceOverride(e.target.value)}
+            className="border border-gray-300 rounded-md px-2 py-1 text-xs bg-white"
+          >
+            <option value="">Auto (Service {inferredOrder})</option>
+            {services.map((s) => (
+              <option key={s.order} value={s.order}>
+                Service {s.order}
+              </option>
+            ))}
+          </select>
+          {serviceOverride !== "" && (
+            <button
+              type="button"
+              onClick={() => setServiceOverride("")}
+              className="underline text-gray-500"
+            >
+              reset
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-col lg:flex-row gap-5">
         {/* Add Attendance Panel */}
@@ -193,7 +302,7 @@ export default function SessionDetail() {
           <div className="w-full lg:flex-1 bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col max-h-[60vh] lg:max-h-[calc(100vh-200px)]">
             <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
               <h3 className="text-sm font-medium text-gray-700">
-                Add non_workers
+                Add Member
               </h3>
               <button
                 onClick={() => {
@@ -213,7 +322,7 @@ export default function SessionDetail() {
               <SearchInput
                 value={memberSearch}
                 onChange={setMemberSearch}
-                placeholder="Search non_workers..."
+                placeholder="Search members..."
               />
             </div>
 
@@ -266,7 +375,7 @@ export default function SessionDetail() {
               ) : !memberSearch.trim() ? (
                 <div className="text-center py-8">
                   <p className="text-xs text-gray-400">
-                    Type to search non_workers
+                    Type to search members
                   </p>
                 </div>
               ) : showRegistrationForm ? (
@@ -285,6 +394,8 @@ export default function SessionDetail() {
         <AttendeeList
           attendees={attendees}
           onShowAdd={() => setShowAddPanel(true)}
+          isFiltered={isFiltered}
+          serviceCount={services.length}
         />
       </div>
     </div>

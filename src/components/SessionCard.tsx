@@ -1,14 +1,14 @@
 import { IAttendanceSession } from '@/types/attendance'
 import { format } from 'date-fns'
-import { Calendar, Clock, Users, Trash2 } from 'lucide-react'
+import { Calendar, Clock, Users } from 'lucide-react'
 
 interface SessionCardProps {
   session: IAttendanceSession
   onClick: () => void
-  onDelete: (e: React.MouseEvent) => void
+  onDelete?: (e: React.MouseEvent) => void
 }
 
-export default function SessionCard({ session, onClick, onDelete }: SessionCardProps) {
+export default function SessionCard({ session, onClick }: SessionCardProps) {
   const date = session.startedAt ? new Date(session.startedAt) : null
   const attendeeCount = session.attendees?.length || 0
 
@@ -39,12 +39,12 @@ export default function SessionCard({ session, onClick, onDelete }: SessionCardP
         </div>
 
         <div className="flex flex-col items-end gap-2">
-          <div
+          {/* <div
             onClick={onDelete}
             className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-all cursor-pointer"
           >
             <Trash2 className="w-4 h-4" />
-          </div>
+          </div> */}
           <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full">
             <Users className="w-3.5 h-3.5" />
             <span className="text-sm font-medium">{attendeeCount}</span>

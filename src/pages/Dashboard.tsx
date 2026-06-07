@@ -34,11 +34,24 @@ export default function Dashboard() {
     fetchSessions()
   }, [fetchSessions])
 
-  const handleCreateSession = async (data: { date: string; serviceName: string; serviceTime: string }) => {
+  const handleCreateSession = async (data: {
+    date: string
+    serviceName: string
+    services: Array<{
+      order: number
+      serviceTime: string
+      preServiceTime?: string | null
+      closesAt?: string | null
+    }>
+  }) => {
     try {
+      // startedAt anchors the session on the calendar; mirror the first service.
+      const startedAt = data.services[0]?.serviceTime ?? new Date(`${data.date}T00:00`).toISOString()
       const session = await attendanceService.startSession({
         serviceName: data.serviceName,
-        startedAt: new Date(`${data.date}T${data.serviceTime}`),
+        date: new Date(`${data.date}T00:00`).toISOString(),
+        startedAt,
+        services: data.services,
       })
       setShowNewDialog(false)
       navigate(`/session/${session.id}`)

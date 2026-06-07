@@ -1,32 +1,86 @@
 import { useState } from 'react'
-import { X } from 'lucide-react'
+import { Plus, Trash2, X } from 'lucide-react'
+import { SessionServiceInput } from '@/types/attendance'
+
+interface ServiceFormRow {
+  serviceTime: string
+  preServiceTime?: string
+  closesAt?: string
+}
 
 interface SessionDialogProps {
   open: boolean
   onClose: () => void
-  onSubmit: (data: { date: string; serviceName: string; serviceTime: string }) => void
+  onSubmit: (data: {
+    date: string
+    serviceName: string
+    services: SessionServiceInput[]
+  }) => void
 }
+
+const emptyRow: ServiceFormRow = { serviceTime: '', preServiceTime: '', closesAt: '' }
 
 export default function SessionDialog({ open, onClose, onSubmit }: SessionDialogProps) {
   const [date, setDate] = useState('')
   const [serviceName, setServiceName] = useState('')
-  const [serviceTime, setServiceTime] = useState('')
+  const [rows, setRows] = useState<ServiceFormRow[]>([{ ...emptyRow }])
+  const [multi, setMulti] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   if (!open) return null
 
+  const updateRow = (idx: number, patch: Partial<ServiceFormRow>) =>
+    setRows((rs) => rs.map((r, i) => (i === idx ? { ...r, ...patch } : r)))
+
+  const addRow = () => setRows((rs) => [...rs, { ...emptyRow }])
+  const removeRow = (idx: number) => setRows((rs) => rs.filter((_, i) => i !== idx))
+
+  const validate = (): string | null => {
+    if (!date) return 'Date is required.'
+    if (!serviceName.trim()) return 'Service name is required.'
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i]
+      if (!r.serviceTime) return `Service ${i + 1}: service time is required.`
+      if (r.preServiceTime && r.preServiceTime > r.serviceTime) {
+        return `Service ${i + 1}: pre-service time must be earlier than service time.`
+      }
+      if (multi && i < rows.length - 1 && !r.closesAt) {
+        return `Service ${i + 1}: closes-at time is required when there's a next service.`
+      }
+      if (r.closesAt && r.closesAt < r.serviceTime) {
+        return `Service ${i + 1}: closes-at must be later than service time.`
+      }
+    }
+    return null
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!date || !serviceName || !serviceTime) return
-    onSubmit({ date, serviceName, serviceTime })
+    const err = validate()
+    if (err) return setError(err)
+    setError(null)
+
+    const services: SessionServiceInput[] = rows.map((r, idx) => {
+      const iso = (t?: string) => (t ? new Date(`${date}T${t}`).toISOString() : null)
+      return {
+        order: idx + 1,
+        serviceTime: iso(r.serviceTime)!,
+        preServiceTime: iso(r.preServiceTime) ?? null,
+        closesAt: iso(r.closesAt) ?? null,
+      }
+    })
+
+    onSubmit({ date, serviceName: serviceName.trim(), services })
     setDate('')
     setServiceName('')
-    setServiceTime('')
+    setRows([{ ...emptyRow }])
+    setMulti(false)
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-md sm:mx-4 p-6">
+      <div className="relative bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-md sm:mx-4 p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-semibold text-gray-900">Start New Session</h2>
           <button
@@ -62,20 +116,95 @@ export default function SessionDialog({ open, onClose, onSubmit }: SessionDialog
               className="w-full px-3 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Time
+
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-700">Service Schedule</span>
+            <label className="inline-flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={multi}
+                onChange={(e) => {
+                  const on = e.target.checked
+                  setMulti(on)
+                  if (!on && rows.length > 1) setRows([rows[0]])
+                  if (on && rows.length < 2) setRows([...rows, { ...emptyRow }])
+                }}
+                className="h-3.5 w-3.5 rounded border-gray-300"
+              />
+              Multi-service
             </label>
-            <input
-              type="time"
-              value={serviceTime}
-              onChange={(e) => setServiceTime(e.target.value)}
-              className="w-full px-3 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            />
           </div>
+
+          <div className="space-y-3">
+            {rows.map((row, idx) => {
+              const isLast = idx === rows.length - 1
+              return (
+                <div key={idx} className="border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-gray-700">Service {idx + 1}</span>
+                    {multi && rows.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeRow(idx)}
+                        className="text-red-500 hover:text-red-700 p-1"
+                        aria-label={`Remove service ${idx + 1}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  <div className={`grid gap-2 ${multi ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Service time *</label>
+                      <input
+                        type="time"
+                        value={row.serviceTime}
+                        onChange={(e) => updateRow(idx, { serviceTime: e.target.value })}
+                        className="w-full px-2 py-2 border border-gray-300 rounded text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Pre-service</label>
+                      <input
+                        type="time"
+                        value={row.preServiceTime ?? ''}
+                        onChange={(e) => updateRow(idx, { preServiceTime: e.target.value })}
+                        className="w-full px-2 py-2 border border-gray-300 rounded text-xs"
+                      />
+                    </div>
+                    {multi && (
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">
+                          Closes at {isLast ? '' : '*'}
+                        </label>
+                        <input
+                          type="time"
+                          value={row.closesAt ?? ''}
+                          onChange={(e) => updateRow(idx, { closesAt: e.target.value })}
+                          className="w-full px-2 py-2 border border-gray-300 rounded text-xs"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {multi && (
+            <button
+              type="button"
+              onClick={addRow}
+              className="w-full py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 flex items-center justify-center gap-1"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add another service
+            </button>
+          )}
+
+          {error && <p className="text-xs text-red-600">{error}</p>}
+
           <button
             type="submit"
-            disabled={!date || !serviceName || !serviceTime}
             className="w-full py-3 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Start Session

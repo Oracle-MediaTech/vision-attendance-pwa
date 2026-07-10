@@ -1,12 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus, Trash2, X } from 'lucide-react'
 import { SessionServiceInput } from '@/types/attendance'
+import { IServiceDay, ISpecialProgram, WEEKDAY_LABEL, Weekday } from '@/types/template'
+import { serviceDayService, specialProgramService } from '@/lib/templateService'
 
 interface ServiceFormRow {
   serviceTime: string
   preServiceTime?: string
   closesAt?: string
 }
+
+type TemplateLink =
+  | { kind: 'day'; id: string }
+  | { kind: 'program'; id: string }
 
 interface SessionDialogProps {
   open: boolean
@@ -15,6 +21,8 @@ interface SessionDialogProps {
     date: string
     serviceName: string
     services: SessionServiceInput[]
+    serviceDayId?: string | null
+    specialProgramId?: string | null
   }) => void
 }
 
@@ -26,8 +34,56 @@ export default function SessionDialog({ open, onClose, onSubmit }: SessionDialog
   const [rows, setRows] = useState<ServiceFormRow[]>([{ ...emptyRow }])
   const [multi, setMulti] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [days, setDays] = useState<IServiceDay[]>([])
+  const [programs, setPrograms] = useState<ISpecialProgram[]>([])
+  const [template, setTemplate] = useState<TemplateLink | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    serviceDayService.list().then(setDays).catch(() => setDays([]))
+    specialProgramService.list().then(setPrograms).catch(() => setPrograms([]))
+  }, [open])
 
   if (!open) return null
+
+  const applyTemplate = (raw: string) => {
+    if (!raw) {
+      setTemplate(null)
+      return
+    }
+    const templateToRows = (
+      services: { serviceTime: string; preServiceTime?: string | null; closesAt?: string | null }[],
+    ): ServiceFormRow[] =>
+      services.map((s) => ({
+        serviceTime: s.serviceTime,
+        preServiceTime: s.preServiceTime ?? '',
+        closesAt: s.closesAt ?? '',
+      }))
+
+    if (raw.startsWith('day:')) {
+      const id = raw.slice(4)
+      const d = days.find((x) => x.id === id)
+      if (!d) return
+      setTemplate({ kind: 'day', id })
+      setServiceName(d.name)
+      const next = templateToRows(d.services)
+      setRows(next.length > 0 ? next : [{ ...emptyRow }])
+      setMulti(next.length > 1)
+    } else if (raw.startsWith('prog:')) {
+      const id = raw.slice(5)
+      const p = programs.find((x) => x.id === id)
+      if (!p) return
+      setTemplate({ kind: 'program', id })
+      setServiceName(p.name)
+      const next = templateToRows(p.services)
+      setRows(next.length > 0 ? next : [{ ...emptyRow }])
+      setMulti(next.length > 1)
+    }
+  }
+
+  const currentTemplateValue = template
+    ? template.kind === 'day' ? `day:${template.id}` : `prog:${template.id}`
+    : ''
 
   const updateRow = (idx: number, patch: Partial<ServiceFormRow>) =>
     setRows((rs) => rs.map((r, i) => (i === idx ? { ...r, ...patch } : r)))
@@ -36,6 +92,7 @@ export default function SessionDialog({ open, onClose, onSubmit }: SessionDialog
   const removeRow = (idx: number) => setRows((rs) => rs.filter((_, i) => i !== idx))
 
   const validate = (): string | null => {
+    if (!template) return 'Pick a service day or special program.'
     if (!date) return 'Date is required.'
     if (!serviceName.trim()) return 'Service name is required.'
     for (let i = 0; i < rows.length; i++) {
@@ -70,11 +127,18 @@ export default function SessionDialog({ open, onClose, onSubmit }: SessionDialog
       }
     })
 
-    onSubmit({ date, serviceName: serviceName.trim(), services })
+    onSubmit({
+      date,
+      serviceName: serviceName.trim(),
+      services,
+      serviceDayId: template?.kind === 'day' ? template.id : null,
+      specialProgramId: template?.kind === 'program' ? template.id : null,
+    })
     setDate('')
     setServiceName('')
     setRows([{ ...emptyRow }])
     setMulti(false)
+    setTemplate(null)
   }
 
   return (
@@ -94,6 +158,39 @@ export default function SessionDialog({ open, onClose, onSubmit }: SessionDialog
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              Use a template
+            </label>
+            <select
+              value={currentTemplateValue}
+              onChange={(e) => applyTemplate(e.target.value)}
+              className="w-full px-3 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+            >
+              <option value="">Pick a service day or special program</option>
+              {days.length > 0 && (
+                <optgroup label="Service Days">
+                  {days.map((d) => (
+                    <option key={d.id} value={`day:${d.id}`}>
+                      {d.name} ({WEEKDAY_LABEL[d.weekday as Weekday]})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {programs.length > 0 && (
+                <optgroup label="Special Programs">
+                  {programs.map((p) => (
+                    <option key={p.id} value={`prog:${p.id}`}>
+                      {p.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">
+              Prefills the service name and times. You can still edit anything.
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
               Service Name
             </label>
             <input
@@ -102,7 +199,6 @@ export default function SessionDialog({ open, onClose, onSubmit }: SessionDialog
               value={serviceName}
               onChange={(e) => setServiceName(e.target.value)}
               className="w-full px-3 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              autoFocus
             />
           </div>
           <div>

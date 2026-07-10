@@ -10,6 +10,7 @@ import {
     MarkAttendancePayload,
     UpdateAttendanceSessionPayload,
 } from "@/types/attendance";
+import { UpsertIncomePayload } from "@/types/income";
 import { IUser } from "@/types/user";
 
 const buildFilterQuery = (filters?: AttendanceFilterParams) => {
@@ -91,6 +92,27 @@ export const attendanceService = {
         handleApiCall<{ success: boolean }>(
             () => apiClient.delete<ApiResponse<{ success: boolean }>>(`/attendance/session/${id}`),
             "Session deleted!"
+        ),
+
+    upsertSessionIncome: (id: string, payload: UpsertIncomePayload) =>
+        handleApiCall<IAttendanceSession>(
+            () => apiClient.put<ApiResponse<IAttendanceSession>>(
+                `/attendance/session/${id}/income`,
+                payload,
+            ),
+            "Income saved!",
+        ),
+
+    closeSession: (id: string) =>
+        handleApiCall<IAttendanceSession>(
+            () => apiClient.post<ApiResponse<IAttendanceSession>>(`/attendance/session/${id}/close`),
+            "Session closed.",
+        ),
+
+    reopenSession: (id: string) =>
+        handleApiCall<IAttendanceSession>(
+            () => apiClient.post<ApiResponse<IAttendanceSession>>(`/attendance/session/${id}/reopen`),
+            "Session reopened.",
         ),
 };
 

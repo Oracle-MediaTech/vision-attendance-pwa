@@ -13,6 +13,9 @@ import RegistrationForm, {
   RegistrationFormHandle,
 } from "@/components/RegistrationForm";
 import AttendanceFilterBar from "@/components/AttendanceFilterBar";
+import CloseSessionDialog from "@/components/CloseSessionDialog";
+import FinancePanel from "@/components/FinancePanel";
+import { UpsertIncomePayload } from "@/types/income";
 import { format, set } from "date-fns";
 import {
   UserPlus,
@@ -21,6 +24,8 @@ import {
   Clock,
   Loader2,
   Download,
+  Lock,
+  Unlock,
   X,
 } from "lucide-react";
 import AttendeeList from "@/components/AttendanceList";
@@ -74,6 +79,23 @@ export default function SessionDetail() {
     fetchSession();
   }, [fetchSession]);
 
+  const isClosed = Boolean(session?.endedAt);
+  const [showCloseDialog, setShowCloseDialog] = useState(false);
+
+  const handleSaveIncome = async (payload: UpsertIncomePayload, andClose: boolean) => {
+    if (!sessionId) return;
+    await attendanceService.upsertSessionIncome(sessionId, payload);
+    if (andClose) await attendanceService.closeSession(sessionId);
+    await fetchSession();
+  };
+
+  const handleReopen = async () => {
+    if (!sessionId) return;
+    if (!confirm("Reopen this session?")) return;
+    await attendanceService.reopenSession(sessionId);
+    await fetchSession();
+  };
+
   const handleExportPdf = useCallback(async () => {
     if (!sessionId || !session) return;
     setExporting(true);
@@ -119,6 +141,16 @@ export default function SessionDetail() {
       seconds: 0,
       milliseconds: 0,
     });
+  };
+
+  // Show worker/non-worker on member rows so the marker sees membership at a
+  // glance; first-timer/visitor stays as church-status so unfamiliar attendees
+  // are obvious. Falls back to "Non-worker" when membershipType is unset.
+  const userStatusLabel = (u: IUser) => {
+    if (u.churchStatus === "FIRST_TIMER") return "First Timer";
+    if (u.churchStatus === "VISITOR") return "Visitor";
+    if (u.membershipType === "WORKER") return "Worker";
+    return "Non-worker";
   };
 
   const handleSingleMark = async (userId: string) => {
@@ -238,9 +270,29 @@ export default function SessionDetail() {
               <Users className="w-3.5 h-3.5" />
               {attendees.length} attendees
             </span>
+            {isClosed && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-amber-50 text-amber-800 border border-amber-200">
+                <Lock className="w-3 h-3" /> Closed
+              </span>
+            )}
           </div>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+          <button
+            onClick={() => setShowCloseDialog(true)}
+            className="flex items-center justify-center gap-2 px-4 py-3 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors w-full sm:w-auto"
+          >
+            {isClosed ? "Edit Income" : "Close Session"}
+          </button>
+          {isClosed && (
+            <button
+              onClick={handleReopen}
+              className="flex items-center justify-center gap-2 px-3 py-3 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors w-full sm:w-auto"
+            >
+              <Unlock className="w-3.5 h-3.5" />
+              Reopen
+            </button>
+          )}
           <button
             onClick={handleExportPdf}
             disabled={exporting || attendees.length === 0}
@@ -357,7 +409,7 @@ export default function SessionDetail() {
                             <span className="text-xs text-gray-500">
                               {alreadyMarked
                                 ? "Already marked"
-                                : user.churchStatus}
+                                : userStatusLabel(user)}
                             </span>
                           </button>
                           <input
@@ -391,13 +443,24 @@ export default function SessionDetail() {
         )}
 
         {/* Attendee List */}
-        <AttendeeList
-          attendees={attendees}
-          onShowAdd={() => setShowAddPanel(true)}
-          isFiltered={isFiltered}
-          serviceCount={services.length}
-        />
+        <div className="w-full lg:flex-1 space-y-0">
+          <FinancePanel services={services} />
+          <AttendeeList
+            attendees={attendees}
+            onShowAdd={() => setShowAddPanel(true)}
+            isFiltered={isFiltered}
+            serviceCount={services.length}
+          />
+        </div>
       </div>
+
+      <CloseSessionDialog
+        open={showCloseDialog}
+        onClose={() => setShowCloseDialog(false)}
+        services={session.services ?? []}
+        isClosed={isClosed}
+        onSave={handleSaveIncome}
+      />
     </div>
   );
 }

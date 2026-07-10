@@ -2,7 +2,7 @@ import { userService } from "@/lib/userService";
 import { IAttendance } from "@/types/attendance";
 import { IUser } from "@/types/user";
 import { format } from "date-fns";
-import { Loader2, Users } from "lucide-react";
+import { ArrowDown, ArrowUp, Loader2, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 
 interface Props {
@@ -13,20 +13,39 @@ interface Props {
   serviceCount?: number;
 }
 
+type SortKey = "markedAt" | "name" | "serviceOrder";
+type SortDir = "asc" | "desc";
+
 export default function AttendeeList({ attendees, onShowAdd, isFiltered, serviceCount = 1 }: Props) {
   const showServiceChip = serviceCount > 1;
   const [showDetail, setShowDetail] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<IUser>({} as IUser);
   const [selectedUser, setSelectedUser] = useState("");
+  const [sortBy, setSortBy] = useState<SortKey>("markedAt");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
-  const sorted = useMemo(
-    () =>
-      [...attendees].sort(
-        (a, b) => new Date(a.markedAt).getTime() - new Date(b.markedAt).getTime(),
-      ),
-    [attendees],
-  );
+  const sorted = useMemo(() => {
+    const getKey = (a: IAttendance): number | string => {
+      switch (sortBy) {
+        case "name":
+          return `${a.user?.firstName ?? ""} ${a.user?.lastName ?? ""}`.toLowerCase();
+        case "serviceOrder":
+          return a.serviceOrder ?? 0;
+        case "markedAt":
+        default:
+          return new Date(a.markedAt).getTime();
+      }
+    };
+    const direction = sortDir === "asc" ? 1 : -1;
+    return [...attendees].sort((a, b) => {
+      const ka = getKey(a);
+      const kb = getKey(b);
+      if (ka < kb) return -1 * direction;
+      if (ka > kb) return 1 * direction;
+      return 0;
+    });
+  }, [attendees, sortBy, sortDir]);
 
   const onAttendeeClick = async (attendeeId: string) => {
     const nextShowDetail = !(showDetail && selectedUser === attendeeId);
@@ -49,11 +68,36 @@ export default function AttendeeList({ attendees, onShowAdd, isFiltered, service
   return (
     <div className="w-full lg:flex-1">
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-4 sm:px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+        <div className="px-4 sm:px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between gap-2">
           <span className="text-xs font-medium text-gray-600">
             {sorted.length} {sorted.length === 1 ? "attendee" : "attendees"}
             {isFiltered && sorted.length > 0 ? " (filtered)" : ""}
           </span>
+          <div className="flex items-center gap-1.5">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortKey)}
+              className="text-xs px-2 py-1 border border-gray-300 rounded bg-white"
+              aria-label="Sort by"
+            >
+              <option value="markedAt">Time</option>
+              <option value="name">Name</option>
+              {showServiceChip && <option value="serviceOrder">Service</option>}
+            </select>
+            <button
+              type="button"
+              onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+              className="p-1 text-gray-600 hover:text-gray-900 border border-gray-300 rounded bg-white"
+              aria-label={`Sort ${sortDir === "asc" ? "descending" : "ascending"}`}
+              title={sortDir === "asc" ? "Ascending" : "Descending"}
+            >
+              {sortDir === "asc" ? (
+                <ArrowUp className="w-3.5 h-3.5" />
+              ) : (
+                <ArrowDown className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
         </div>
         {sorted.length === 0 ? (
           isFiltered ? (

@@ -1,15 +1,21 @@
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
-import { Toaster } from 'sonner'
-import Login from '@/pages/Login'
-import Dashboard from '@/pages/Dashboard'
-import SessionDetail from '@/pages/SessionDetail'
-import Members from '@/pages/Members'
-import Layout from '@/components/Layout'
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  Outlet,
+} from "react-router-dom";
+import { Toaster } from "sonner";
+import Login from "@/pages/Login";
+import Dashboard from "@/pages/Dashboard";
+import SessionDetail from "@/pages/SessionDetail";
+import Members from "@/pages/Members";
+import Layout from "@/components/Layout";
 
 function AuthGuard() {
-  const token = localStorage.getItem('accessToken')
-  if (!token) return <Navigate to="/login" replace />
-  return <Outlet />
+  const token = localStorage.getItem("accessToken");
+  if (!token) return <Navigate to="/terminal/login" replace />;
+  return <Outlet />;
 }
 
 export default function App() {
@@ -27,5 +33,5 @@ export default function App() {
         </Route>
       </Routes>
     </BrowserRouter>
-  )
+  );
 }

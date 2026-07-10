@@ -1,6 +1,6 @@
 import { IAttendanceSession } from '@/types/attendance'
 import { format } from 'date-fns'
-import { Calendar, Clock, Users } from 'lucide-react'
+import { Calendar, Clock, Lock, Users } from 'lucide-react'
 
 interface SessionCardProps {
   session: IAttendanceSession
@@ -11,6 +11,7 @@ interface SessionCardProps {
 export default function SessionCard({ session, onClick }: SessionCardProps) {
   const date = session.startedAt ? new Date(session.startedAt) : null
   const attendeeCount = session.attendees?.length || 0
+  const isClosed = Boolean(session.endedAt)
 
   return (
     <button
@@ -39,12 +40,15 @@ export default function SessionCard({ session, onClick }: SessionCardProps) {
         </div>
 
         <div className="flex flex-col items-end gap-2">
-          {/* <div
-            onClick={onDelete}
-            className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-all cursor-pointer"
-          >
-            <Trash2 className="w-4 h-4" />
-          </div> */}
+          {isClosed && (
+            <div
+              className="flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full"
+              title="Session closed"
+            >
+              <Lock className="w-3 h-3" />
+              <span className="text-[10px] font-medium uppercase tracking-wide">Closed</span>
+            </div>
+          )}
           <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full">
             <Users className="w-3.5 h-3.5" />
             <span className="text-sm font-medium">{attendeeCount}</span>

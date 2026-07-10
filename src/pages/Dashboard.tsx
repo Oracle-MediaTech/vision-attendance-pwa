@@ -1,12 +1,65 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { attendanceService } from '@/lib/attendanceService'
 import { IAttendanceSession } from '@/types/attendance'
+import { WEEKDAY_LABEL, WEEKDAY_ORDER, Weekday } from '@/types/template'
 import SessionCard from '@/components/SessionCard'
 import SessionDialog from '@/components/SessionDialog'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import SearchInput from '@/components/SearchInput'
-import { Plus, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { Plus, ChevronDown, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+
+interface SessionGroup {
+  key: string
+  title: string
+  subtitle?: string
+  sortKey: number
+  sessions: IAttendanceSession[]
+}
+
+// Same grouping algorithm as the admin AttendanceSessionTable so the two
+// surfaces stay in sync — ServiceDays first in weekday order, then Special
+// Programs, then any orphans.
+const groupSessions = (sessions: IAttendanceSession[]): SessionGroup[] => {
+  const map = new Map<string, SessionGroup>()
+  for (const s of sessions) {
+    if (s.serviceDay) {
+      const key = `day:${s.serviceDay.id}`
+      if (!map.has(key)) {
+        const idx = WEEKDAY_ORDER.indexOf(s.serviceDay.weekday as Weekday)
+        map.set(key, {
+          key,
+          title: s.serviceDay.name,
+          subtitle: WEEKDAY_LABEL[s.serviceDay.weekday as Weekday],
+          sortKey: idx === -1 ? 50 : idx,
+          sessions: [],
+        })
+      }
+      map.get(key)!.sessions.push(s)
+    } else if (s.specialProgram) {
+      const key = `prog:${s.specialProgram.id}`
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          title: s.specialProgram.name,
+          subtitle: s.specialProgram.date
+            ? new Date(s.specialProgram.date).toLocaleDateString()
+            : 'Special Program',
+          sortKey: 100,
+          sessions: [],
+        })
+      }
+      map.get(key)!.sessions.push(s)
+    } else {
+      const key = 'orphan'
+      if (!map.has(key)) {
+        map.set(key, { key, title: 'Other', sortKey: 999, sessions: [] })
+      }
+      map.get(key)!.sessions.push(s)
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => a.sortKey - b.sortKey)
+}
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -16,6 +69,16 @@ export default function Dashboard() {
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1 })
   const [showNewDialog, setShowNewDialog] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  // Collapsed group keys; default all expanded.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+
+  const toggleGroup = (key: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
 
   const fetchSessions = useCallback(async (page = 1) => {
     setLoading(true)
@@ -43,6 +106,8 @@ export default function Dashboard() {
       preServiceTime?: string | null
       closesAt?: string | null
     }>
+    serviceDayId?: string | null
+    specialProgramId?: string | null
   }) => {
     try {
       // startedAt anchors the session on the calendar; mirror the first service.
@@ -52,6 +117,8 @@ export default function Dashboard() {
         date: new Date(`${data.date}T00:00`).toISOString(),
         startedAt,
         services: data.services,
+        serviceDayId: data.serviceDayId ?? null,
+        specialProgramId: data.specialProgramId ?? null,
       })
       setShowNewDialog(false)
       navigate(`/session/${session.id}`)
@@ -74,6 +141,8 @@ export default function Dashboard() {
   const filteredSessions = sessions.filter((s) =>
     s.serviceName.toLowerCase().includes(search.toLowerCase())
   )
+
+  const groups = useMemo(() => groupSessions(filteredSessions), [filteredSessions])
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -120,18 +189,49 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredSessions.map((session) => (
-              <SessionCard
-                key={session.id}
-                session={session}
-                onClick={() => navigate(`/session/${session.id}`)}
-                onDelete={(e) => {
-                  e.stopPropagation()
-                  setDeleteTarget(session.id)
-                }}
-              />
-            ))}
+          <div className="space-y-6">
+            {groups.map((group) => {
+              const isCollapsed = collapsed.has(group.key)
+              return (
+                <section key={group.key} className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group.key)}
+                    className="w-full flex items-baseline gap-2 hover:bg-gray-50 rounded px-1 py-1 -mx-1 text-left"
+                    aria-expanded={!isCollapsed}
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight className="w-4 h-4 self-center text-gray-400" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 self-center text-gray-400" />
+                    )}
+                    <h2 className="text-base font-semibold text-gray-900">{group.title}</h2>
+                    {group.subtitle && (
+                      <span className="text-xs text-gray-500">{group.subtitle}</span>
+                    )}
+                    <span className="text-xs text-gray-400 ml-auto">
+                      {group.sessions.length}{' '}
+                      {group.sessions.length === 1 ? 'session' : 'sessions'}
+                    </span>
+                  </button>
+                  {!isCollapsed && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {group.sessions.map((session) => (
+                        <SessionCard
+                          key={session.id}
+                          session={session}
+                          onClick={() => navigate(`/session/${session.id}`)}
+                          onDelete={(e) => {
+                            e.stopPropagation()
+                            setDeleteTarget(session.id)
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )
+            })}
           </div>
 
           {pagination.totalPages > 1 && (

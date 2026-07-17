@@ -51,7 +51,7 @@ apiClient.interceptors.response.use(
         }
       } catch {
         localStorage.removeItem("accessToken");
-        window.location.href = "/terminal/login";
+        window.location.href = "/login";
       }
     }
     return Promise.reject(error);

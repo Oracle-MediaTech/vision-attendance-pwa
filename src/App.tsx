@@ -14,7 +14,7 @@ import Layout from "@/components/Layout";
 
 function AuthGuard() {
   const token = localStorage.getItem("accessToken");
-  if (!token) return <Navigate to="/terminal/login" replace />;
+  if (!token) return <Navigate to="/login" replace />;
   return <Outlet />;
 }
 

@@ -63,7 +63,6 @@ export default function Members() {
             payload[key] = value;
          });
          payload.departmentIds = formData.getAll("departmentIds");
-         console.log({ payload });
          await authService.register(payload);
          toast.success("Member registered successfully");
          form.reset();
